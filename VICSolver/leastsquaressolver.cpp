@@ -98,74 +98,6 @@ void leastSquaresSolver::LU_decompose(int size)
     //      if (LU[ps[VAR_NUM-1]][VAR_NUM-1]==0.0) err_code(1);
 }
 
-void leastSquaresSolver::LU_decompose2(int num)
-{
-    int i,j,k,pivotindex;
-    double scales[MAX_EQNS];
-    double normrow,pivot,size,biggest,mult;
-
-    for (i=0;i<num;i++) //заполнение начальными данными
-    {
-        ps[i]=i;//маппинг изначального порядка на переставленный.
-        normrow=0;//максимум в итой строке
-
-        for (j=0;j<num;j++)
-        {
-            LU[i][j]=M_[i][j];
-            if (normrow<fabs(LU[i][j]))
-                normrow=fabs(LU[i][j]);
-        }
-        if (normrow!=0)
-            scales[i]=1.0/normrow;//для общих множителей
-        else
-        {
-            scales[i]=0.0;
-            //     err_code(DIV_ZERO);
-        }
-    }
-    //метод гаусса с частичным упорядочиванием
-
-    for (k=0;k<num-1;k++)
-    {
-        biggest=0;
-        for (i=k; i<num;i++)
-        {
-            size=fabs(LU[ps[i]][k])*scales[ps[i]];
-            if (biggest<size)
-            {
-                biggest=size;
-                pivotindex=i;
-            }
-        }
-
-        if (biggest==0)
-        {
-            //	err_code(1);
-            pivotindex=0;
-        }
-
-        if (pivotindex!=k)
-        {
-            j=ps[k];
-            ps[k]=ps[pivotindex];
-            ps[pivotindex]=j;
-        }
-
-        pivot=LU[ps[k]][k];
-
-        for (i=k+1;i<num;i++)
-        {
-            mult=LU[ps[i]][k]/pivot;
-            LU[ps[i]][k]=mult;
-
-            if (mult!=0.0)
-            {
-                for (j=k+1; j<num;j++)
-                    LU[ps[i]][j]-=mult*LU[ps[k]][j];
-            }
-        }
-    }
-}
 
 void leastSquaresSolver::m_solve(int num)
 {
@@ -1273,4 +1205,233 @@ void leastSquaresSolver::get_vortEq_nomatr(posVelAccelVort &p, double delta)
         p.f+=p.INV[0][j]*mwb[j];
     }
 
+}
+
+///debug algorithms:
+void leastSquaresSolver::fill_u()
+{
+
+    for (int i=0;i<Layer.currValues.size();i++)
+    {
+
+        double dx=Layer.currValues[i].x;
+        double dy=Layer.currValues[i].y;
+        double dz=Layer.currValues[i].z;
+
+        double r2=dx*dx + dy*dy + dz*dz;
+
+        Layer.currValues[i].u0=-dz/(r2+0.01);
+        Layer.currValues[i].v0=0.0;
+        Layer.currValues[i].w0=dx/(r2+0.01);
+
+    }
+    getVort_FromVel_LS();
+    getVel_FromVort();
+
+
+}
+void leastSquaresSolver::fill_omega()
+{
+    Layer.currValues.clear();
+    for (int i=0;i<30;i++)
+    {
+        posVelAccelVort n;
+        n.x=1.0*(rand()*1.0/RAND_MAX-0.5);
+        n.y=0.01*(rand()*1.0/RAND_MAX-0.5);
+        n.z=1.0*(rand()*1.0/RAND_MAX-0.5);;
+
+        n.vortx=0.001*(rand()*1.0/RAND_MAX-0.5);
+        n.vorty=rand()*1.0/RAND_MAX;
+        n.vortz=0.001*(rand()*1.0/RAND_MAX-0.5);
+        Layer.currValues.push_back(n);
+    }
+    getVel_FromVort();
+}
+
+void leastSquaresSolver::getVel_FromVort()
+{
+    //Ax=b where x is omega and b is vel
+    //three vectro components are going in sequence for each i
+    //velocity at i'th points from j'th points
+    int num=Layer.currValues.size();
+
+    for (int i=0;i<num;i++)
+    {
+        //the
+        x_m[i*3]=Layer.currValues[i].vortx;
+        x_m[i*3+1]=Layer.currValues[i].vorty;
+        x_m[i*3+2]=Layer.currValues[i].vortz;
+
+        //b_m[i]+=M_[n][i]*x_m[n];
+        //ux[i]=M_[n][i]*wx[n] + M_[n+1][i]*wy[n] +M_[n+2][i]*wz[n]
+        // ux=zr3*(dy*wz - dz*wy)
+        // uy=zr3*(dz*wx - dx*wz)
+        // uz=zr3*(dx*wy - dy*wx)
+        for (int j=0;j<num;j++)
+        {
+            double dx,dy,dz;
+            dx=Layer.currValues[i].x-Layer.currValues[j].x;
+            dy=Layer.currValues[i].y-Layer.currValues[j].y;
+            dz=Layer.currValues[i].z-Layer.currValues[j].z;
+            double r2=dx*dx + dy*dy + dz*dz;
+            double zr3=1.0/(r2*sqrt(r2)+0.001);
+            //ux from wx                 ux from wy                  ux from wz
+            M_[i*3][j*3]=0.0;            M_[i*3 + 1][j*3]=-zr3*dz;   M_[i*3 + 2][j*3]=zr3*dy;
+
+            //uy from wx                 uy from wy                      uy from wz
+            M_[i*3][j*3 + 1]=zr3*dz;     M_[i*3 + 1][j*3 + 1]=0.0;   M_[i*3 + 2][j*3 + 1]=-zr3*dx;
+
+            //uz from wx                 uz from wy                      uz from wz
+            M_[i*3][j*3 + 2]=-zr3*dy;     M_[i*3 + 1][j*3 + 2]=zr3*dx;   M_[i*3 + 2][j*3 + 2]=0.0;
+
+        }
+    }
+
+    for (int i=0;i<num*3;i++)
+    {
+        b_m[i]=0;
+        for (int n=0;n<num*3;n++)
+        {
+            b_m[i]+=M_[n][i]*x_m[n];  //Ax=b
+        }
+    }
+
+    for (int i=0;i<num;i++)
+    {
+        Layer.currValues[i].u=b_m[i*3];
+        Layer.currValues[i].v=b_m[i*3+1];
+        Layer.currValues[i].w=b_m[i*3+2];
+
+        //printf("u=%f v=%f w=%f \n",m_p[i].u,m_p[i].v,m_p[i].w);
+    }
+}
+
+void leastSquaresSolver::getVort_FromVel()
+{
+    //Ax=b where x is omega and b is vel
+    //three vectro components are going in sequence for each i
+    //velocity at i'th points from j'th points
+    int num=Layer.currValues.size();
+    for (int i=0;i<num;i++)
+    {
+        //the direct inversion method
+        b_m[i*3]=Layer.currValues[i].u0;
+        b_m[i*3+1]=Layer.currValues[i].v0;
+        b_m[i*3+2]=Layer.currValues[i].w0;
+
+        //b_m[i]+=M_[n][i]*x_m[n];
+        //ux[i]=M_[n][i]*wx[n] + M_[n+1][i]*wy[n] +M_[n+2][i]*wz[n]
+        // ux=zr3*(dy*wz - dz*wy)
+        // uy=zr3*(dz*wx - dx*wz)
+        // uz=zr3*(dx*wy - dy*wx)
+        for (int j=0;j<num;j++)
+        {
+            double dx,dy,dz;
+            dx=Layer.currValues[i].x-Layer.currValues[j].x;
+            dy=Layer.currValues[i].y-Layer.currValues[j].y;
+            dz=Layer.currValues[i].z-Layer.currValues[j].z;
+            double r2=dx*dx + dy*dy + dz*dz;
+            double zr3=1.0/(r2*sqrt(r2)+0.001);
+            //ux from wx                 ux from wy                  ux from wz
+            M_[i*3][j*3]=0.0;            M_[i*3 + 1][j*3]=-zr3*dz;   M_[i*3 + 2][j*3]=zr3*dy;
+
+            //uy from wx                 uy from wy                      uy from wz
+            M_[i*3][j*3 + 1]=zr3*dz;     M_[i*3 + 1][j*3 + 1]=0.0;   M_[i*3 + 2][j*3 + 1]=-zr3*dx;
+
+            //uz from wx                 uz from wy                      uz from wz
+            M_[i*3][j*3 + 2]=-zr3*dy;     M_[i*3 + 1][j*3 + 2]=zr3*dx;   M_[i*3 + 2][j*3 + 2]=0.0;
+
+        }
+    }
+
+    LU_decompose(num*3);
+    m_solve(num*3);
+
+
+    for (int i=0;i<num;i++)
+    {
+        Layer.currValues[i].vortx=x_m[i*3];
+        Layer.currValues[i].vorty=x_m[i*3+1];
+        Layer.currValues[i].vortz=x_m[i*3+2];
+    }
+}
+
+void leastSquaresSolver::getVort_FromVel_LS()
+{
+    //solving in least squares sense
+    //Ax=b where x is omega and b is vel
+    //three vectro components are going in sequence for each i
+    //velocity at i'th points from j'th points
+
+    int num=Layer.currValues.size();
+
+    for (int i=0;i<num;i++)
+    {
+        //the Least squares inversion method
+        b_m[i*3]=  Layer.currValues[i].u0;
+        b_m[i*3+1]=Layer.currValues[i].v0;
+        b_m[i*3+2]=Layer.currValues[i].w0;
+
+        //b_m[i]+=M_[n][i]*x_m[n];
+        //ux[i]=M_[n][i]*wx[n] + M_[n+1][i]*wy[n] +M_[n+2][i]*wz[n]
+        // ux=zr3*(dy*wz - dz*wy)
+        // uy=zr3*(dz*wx - dx*wz)
+        // uz=zr3*(dx*wy - dy*wx)
+        for (int j=0;j<num;j++)
+        {
+            double dx,dy,dz;
+            dx=Layer.currValues[i].x - Layer.currValues[j].x;
+            dy=Layer.currValues[i].y - Layer.currValues[j].y;
+            dz=Layer.currValues[i].z - Layer.currValues[j].z;
+            double r2=dx*dx + dy*dy + dz*dz;
+            double zr3=1.0/(r2*sqrt(r2)+0.001);
+            //ux from wx                 ux from wy                  ux from wz
+            M_0[i*3][j*3]=0.0;            M_0[i*3 + 1][j*3]=-zr3*dz;   M_0[i*3 + 2][j*3]=zr3*dy;
+
+            //uy from wx                 uy from wy                      uy from wz
+            M_0[i*3][j*3 + 1]=zr3*dz;     M_0[i*3 + 1][j*3 + 1]=0.0;   M_0[i*3 + 2][j*3 + 1]=-zr3*dx;
+
+            //uz from wx                 uz from wy                      uz from wz
+            M_0[i*3][j*3 + 2]=-zr3*dy;     M_0[i*3 + 1][j*3 + 2]=zr3*dx;   M_0[i*3 + 2][j*3 + 2]=0.0;
+
+        }
+    }
+
+    for (int i=0;i<num*3;i++)
+    {
+        for (int j=0;j<num*3;j++)
+        {
+            M_[i][j]=0.0;
+            for (int n=0;n<num*3;n++)
+            {
+                M_[i][j]+=M_0[n][i]*M_0[n][j];  //its mvm
+            }
+        }
+    }
+
+    for (int i=0;i<num*3;i++)
+    {
+        mwb[i]=0.0;
+        for (int n=0;n<num*3;n++)
+        {
+            mwb[i]+=M_0[n][i]*b_m[n];  //its mvb
+        }
+    }
+
+    for (int i=0;i<num*3;i++)
+    {
+        b_m[i]=mwb[i];  //its mvb
+
+    }
+
+    LU_decompose(num*3);
+    m_solve(num*3);
+
+
+    for (int i=0;i<num;i++)
+    {
+        Layer.currValues[i].vortx=x_m[i*3];
+        Layer.currValues[i].vorty=x_m[i*3+1];
+        Layer.currValues[i].vortz=x_m[i*3+2];
+    }
 }

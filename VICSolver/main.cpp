@@ -105,6 +105,21 @@ void display(void)
     orient_z=view_z+o_z;
     gluLookAt(view_x,view_y,view_z,orient_x,orient_y,orient_z,0,0,1);
 
+
+    //coordinate axes
+    glBegin(GL_LINES);
+        glColor3f(1,0,0);
+        glVertex3f(0,0,0);
+        glVertex3f(1,0,0);
+
+        glColor3f(0,1,0);
+        glVertex3f(0,0,0);
+        glVertex3f(0,1,0);
+
+        glColor3f(0,0,1);
+        glVertex3f(0,0,0);
+        glVertex3f(0,0,1);
+    glEnd();
     double mean_curr=0.0;
     int mass=0;
     for( size_t i = 0; i < 250; i++)
@@ -123,14 +138,17 @@ void display(void)
         glBegin(GL_POINTS);
         for( size_t i = 0; i < Layer.currValues.size(); i+=1 )
         {
-            if( Layer.currValues[i].y<Layer.y0_+(54*1.0/100)*(Layer.y1_-Layer.y0_)
+            /*if( Layer.currValues[i].y<Layer.y0_+(54*1.0/100)*(Layer.y1_-Layer.y0_)
                     && Layer.currValues[i].y>Layer.y0_+(46*1.0/100)*(Layer.y1_-Layer.y0_)) {
-                double val = (Layer.currValues[i].u-mean_curr)*scale;
+                double val = (Layer.currValues[i].u -mean_curr)*scale;
                 glColor3f(-val,-val,val);
-                if (fabs(Layer.currValues[i].ax) < 1e-5)
-                    glColor3f(1,0,0);
+                //if (fabs(Layer.currValues[i].ax) < 1e-5)
+                  //  glColor3f(1,0,0);
                 glVertex3f(Layer.currValues[i].x, Layer.currValues[i].y, Layer.currValues[i].z - Layer.z1_);
-            }
+            }*/
+            double val = (Layer.currValues[i].vorty)*scale;
+            glColor3f(-val,-val,val);
+            glVertex3f(Layer.currValues[i].x, Layer.currValues[i].y, Layer.currValues[i].z);
         }
         glEnd();
     }
@@ -145,6 +163,17 @@ void display(void)
             glVertex3f(Layer.currValues[i].x, Layer.currValues[i].y, Layer.currValues[i].z);
             glColor3f(0,0,0);
             glVertex3f(Layer.currValues[i].x+scale*5.0*Layer.currValues[i].u, Layer.currValues[i].y+scale*5.0*Layer.currValues[i].v, Layer.currValues[i].z+scale*5.0*Layer.currValues[i].w);
+        }
+        glEnd();
+
+        glLineWidth(1);
+        glBegin(GL_LINES);
+        for( size_t i = 0; i < Layer.currValues.size(); i+=1 )
+        {
+            glColor3f(1,0,0);
+            glVertex3f(Layer.currValues[i].x+0.01, Layer.currValues[i].y, Layer.currValues[i].z);
+            glColor3f(0,0,0);
+            glVertex3f(Layer.currValues[i].x+0.01+scale*5.0*Layer.currValues[i].u0, Layer.currValues[i].y+scale*5.0*Layer.currValues[i].v0, Layer.currValues[i].z+scale*5.0*Layer.currValues[i].w0);
         }
         glEnd();
     }
@@ -280,6 +309,40 @@ void setNiNjNk(int opticell, double j_in_i,double k_in_i) //opricell is the desi
     Layer.nk=int (nk);
 
     printf("ni=%d nj=%d nk=%d \n",Layer.ni,Layer.nj,Layer.nk);
+}
+
+void loadCurrValuesVortTest()
+{
+    lssA.fill_omega();
+    lssA.fill_u();
+
+    xmin = 1e10;
+    xmax = -1e10;
+    ymin = 1e10;
+    ymax = -1e10;
+    zmin = 1e10;
+    zmax = -1e10;
+
+    for (int i=0;i<Layer.currValues.size();i++)
+    {
+        xmin=fmin(xmin,Layer.currValues[i].x);
+        ymin=fmin(ymin,Layer.currValues[i].y);
+        zmin=fmin(zmin,Layer.currValues[i].z);
+
+        xmax=fmax(xmax,Layer.currValues[i].x);
+        ymax=fmax(ymax,Layer.currValues[i].y);
+        zmax=fmax(zmax,Layer.currValues[i].z);
+    }
+    ymax=1.0;
+    ymin=-1.0;
+    Layer.x0_=xmin-0.001*(xmax-xmin);
+    Layer.x1_=xmax+0.001*(xmax-xmin);
+
+    Layer.y0_=ymin-0.001*(ymax-ymin);
+    Layer.y1_=ymax+0.001*(ymax-ymin);
+
+    Layer.z0_=zmin-0.001*(zmax-zmin);
+    Layer.z1_=zmax+0.001*(zmax-zmin);
 }
 
 void loadCurrValuesFromDNS(int i)
@@ -865,7 +928,7 @@ void solveVortEq_nomatr()
                 n.INV[i][j]=Layer.currValues[s].INV[i][j];
 
         lssA.get_vortEq_nomatr(n,Layer.rad);
-        res+=abs(Layer.currValues[s].u - n.f);
+        res+=fabs(Layer.currValues[s].u - n.f);
         Layer.currValues[s].u = n.f;
     }
     res/=Layer.currValues.size();
@@ -949,7 +1012,8 @@ void init()
 
     loadReference();
 
-    loadCurrValuesFromDNS(currTime);
+    //loadCurrValuesFromDNS(currTime);
+     loadCurrValuesVortTest();
 
     view_x=0.5*(Layer.x1_+Layer.x0_);
     view_y=Layer.y0_ -2.0*(Layer.y1_-Layer.y0_);

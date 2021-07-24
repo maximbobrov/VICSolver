@@ -39,7 +39,6 @@ public:
     double pww;
     double rad;
     void LU_decompose(int size);
-    void LU_decompose2(int size);
     void m_solve(int num);
     void m_invert(int size);
 
@@ -57,6 +56,14 @@ public:
 
     void get_vortEq_nomatr(posVelAccelVort &p,  double delta);
     void get_vortEq_matr(posVelAccelVort &p, double delta);
+//debuggin vorticity inversion
+    void fill_u(); //initialization of velocities
+    void fill_omega(); //initialization of vorticities;
+
+    void getVel_FromVort();
+    void getVort_FromVel(); //direct inverion of the matrix
+    void getVort_FromVel_LS(); //least squares inversion
+
 };
 
 

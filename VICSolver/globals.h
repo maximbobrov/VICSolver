@@ -118,6 +118,7 @@ struct posVelAccelVort
         : x(ix), y(iy), z(iz), u(iu), v(iv), w(iw), ax(iax), ay(iay), az(iaz), vortx(ivortx), vorty(ivorty), vortz(ivortz) {}
     double x, y, z;
     double u, v, w;
+    double u0, v0, w0;
     double ax, ay, az;
     double vortx, vorty, vortz;
     double rotvortx, rotvorty, rotvortz;

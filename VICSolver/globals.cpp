@@ -41,7 +41,7 @@ double cv=0.001;
 
 double dx,dy,dz;
 
-bool drawVelocity = false;
+bool drawVelocity = true;//false;
 bool drawAcceleration = false;
 bool drawArr = false;
 
